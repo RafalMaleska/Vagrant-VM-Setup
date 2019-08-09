@@ -1,0 +1,101 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'yaml'
+
+dir = File.dirname(File.expand_path(__FILE__))
+servers = YAML.load_file("#{dir}/config.yml")
+
+Vagrant.configure("2") do |config|
+  required_plugins = %w( vagrant-proxyconf vagrant-disksize vagrant-vbguest )
+  _retry = false
+  required_plugins.each do |plugin|
+    unless Vagrant.has_plugin? plugin
+      system "vagrant plugin install #{plugin}"
+      _retry = true
+    end
+  end
+  if (_retry)
+    exec "vagrant " + ARGV.join(' ')
+  end
+
+  servers["vms"].each do |server|
+    config.vm.define server["name"] do |srv|
+
+      use_proxy = false
+      http_proxy_host = ''
+      http_proxy_port = ''
+      https_proxy_host = ''
+      https_proxy_port = ''
+      if server["proxy"]
+        use_proxy = true
+        http_proxy_host = server["proxy"]["http_proxy_host"]
+        http_proxy_port = server["proxy"]["http_proxy_port"]
+        https_proxy_host = server["proxy"]["https_proxy_host"]
+        https_proxy_port = server["proxy"]["https_proxy_port"]
+
+        if Vagrant.has_plugin?("vagrant-proxyconf")
+          config.proxy.http = "#{http_proxy_host}:#{http_proxy_port}"
+          config.proxy.https = "#{https_proxy_host}:#{https_proxy_port}"
+          config.proxy.no_proxy = "localhost,127.0.0.1,.deutschebahn.com, .db.de"
+          config.proxy.enabled = {apt: true, chef: false, docker: false, env: false, git: false, npm: false, pear: false, svn: false, yum: false}
+        end
+      end
+
+      if Vagrant.has_plugin?("vagrant-vbguest")
+        srv.vbguest.auto_update = true
+        srv.vbguest.no_install = server["vbguest"]["no_install"]
+        srv.vbguest.no_remote = false
+      end
+
+      srv.vm.box = "generic/ubuntu1904"
+
+      if server["disk_resize"]["should_resize"]
+        if Vagrant.has_plugin?("vagrant-disksize")
+          srv.disksize.size = server["disk_resize"]["disksize"]
+        end
+      end
+
+      if server["box_version"]
+        srv.vm.box_version = server["box_version"]
+      end
+
+      if server["box_check_update"]
+        srv.vm.box_check_update = server["box_check_update"]
+      end
+
+      srv.vm.provider :virtualbox do |vb|
+        vb.name = server["name"]
+        if server["gui"]
+          vb.gui = server["gui"]
+        end
+		vb.gui = true
+        vb.memory = server["ram"]
+        vb.cpus = server["cpus"]
+		vb.customize ["modifyvm", :id, "--clipboard", "bidirectional"]
+		vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      end
+
+      if server["ports"]
+        server['ports'].each do |ports|
+          srv.vm.network "forwarded_port",
+                         guest: ports["guest"],
+                         host: ports["host"]
+        end
+      end
+
+      if server["syncDir"]
+        server['syncDir'].each do |syncDir|
+          srv.vm.synced_folder syncDir['host'],
+                               syncDir['guest'],
+                               create: true
+        end
+      end
+
+      srv.vm.provision "shell" do |script|
+        script.args = "#{use_proxy} #{http_proxy_host} #{http_proxy_port} #{https_proxy_host} #{https_proxy_port}"
+        script.path = "provision.sh"
+      end
+    end
+  end
+end

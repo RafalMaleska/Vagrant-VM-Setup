@@ -1,0 +1,30 @@
+vms:
+  - name: 'ubuntu-docker-k8s-box-v7'
+    username: anotheruser
+    
+    # The Vagrant box used is 'ubuntu/bionic64'. If box_version is not set the latest version will be pulled.
+    #box_version:
+    box_check_update: true
+    # For systems with 32 GB RAM 24576 is the max limit.
+    ram: '14336'
+    cpus: '4'
+    # Activate GUI
+    gui: true
+
+
+    # Folders to map so that host and guest can share local git repos, Maven local repository, etc.
+    syncDir:
+      - host: 'C:\\Projekte'
+        guest: '/home/vagrant/sharedProjectFolder/'
+        create: true
+
+
+    # If set to 'true' the vbguest plugin will only check if the version of the guest's VirtualBox guest additions matches the host's VirtualBox version but doesn't attempt to install the matching version.
+    # If set to 'false' the matching version will be installed.
+    vbguest:
+      no_install: false
+
+    # Resizing option since ubuntu box comes with only 10 GB disk.
+    disk_resize:
+      should_resize: true
+      disksize: '40GB'
